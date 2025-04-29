@@ -12,32 +12,57 @@ import fetch from "node-fetch";
 const TONGCHENG_CODE_URL = "https://www.ly.com/trainbffapi/getCodeByStationName";
 const TONGCHENG_TRAIN_URL = "https://www.ly.com/trainsearchbffapi/trainSearch";
 
+// 预定义一组常见的User-Agent字符串
+const USER_AGENTS = [
+    // Chrome (Windows/Mac)
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    
+    // Firefox
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:125.0) Gecko/20100101 Firefox/125.0',
+    
+    // Safari
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15',
+    
+    // Edge
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.2478.67',
+    
+    // 移动端UA
+    'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (Linux; Android 13; SM-G998B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+    
+    // 特殊浏览器
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 OPR/85.0.4341.18',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Vivaldi/6.2.3105.47'
+];
+
 const GET_HUOCHEPIAO_LIST:Tool = {
-    name: "get_huochepiao_list",
-    description: "火车票车次列表查询功能，数据来源于同程旅行网火车票查询，输入用户提供的出发站出发城市、到达站到达城市、出发日期进行查询结果，返回出发站信息和到达站信息和座位票价信息",
+    name: "query_train_tickets_list",
+    description: "火车票车次列表查询功能，查询指定日期、出发地和目的地之间的火车票信息。输入用户提供的出发站出发城市、到达站到达城市、出发日期进行查询结果，返回包含车次列表、出发/到达站信息、座位类型及票价等详细信息。本工具提供中国境内火车票班次信息的全面查询服务，数据实时对接同程旅行网官方接口。 提供不同座位类型（商务座/一等座/二等座等）的实时票价",
     inputSchema: {
         type: "object",
         properties: {
-            startCityName: {
+            depStationName: {
                 type: "string",
-                description: "出发火车站名称或者出发城市名称"
+                description: "出发火车站名称或者出发城市名称。支持输入火车站全称（如北京西站）或城市名（如北京）"
             },
-            arryCityName: {
+            arrStationName: {
                 type: "string",
-                description: "目的地火车站名称或者到城市名称"
+                description: "目的地火车站名称或者到城市名称。支持输入火车站全称（如北京西站）或城市名（如北京）"
             },
-            startDate: {
+            depDate: {
                 type: "string",
-                description: "出发日期，格式为yyyy-MM-dd"
+                description: "出发日期：格式必须为yyyy-MM-dd"
             }
         },
-        required: ["startCityName","arryCityName","startDate"]
+        required: ["depStationName","arrStationName","depDate"]
     }
 };
 
 const GET_SYSTIME:Tool = {
-    name: "get_systemtime",
-    description: "当前时间查询功能，它可以帮助你获取当前系统日期时间是多少,返回格式为:yyyy-MM-dd hh:mm:ss，火车票查询时时间相关可以使用",
+    name: "get_current_system_time",
+    description: "查询当前系统时间工具，它可以帮助你获取当前系统日期时间，返回格式为:yyyy-MM-dd hh:mm:ss，可用于火车票查询等需要时间验证的场景。",
     inputSchema: {
         type: "object",
         properties: {
@@ -52,30 +77,52 @@ const SUPPORT_TOOLS = [
   ] as const;
   
 
-  async function handleGetHuochepiaoList(startCityName :string,arryCityName :string,startDate :string) {
-    const headers = {
-       'Content-Type': 'application/json'
-    };
+  // 获取随机User-Agent
+function getRandomUserAgent(): string {
+    return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
 
+// 辅助函数：构建响应
+function buildSuccessResponse(text: string) {
+    return {
+        content: [{ type: "text", text }],
+        isError: false
+    };
+}
+function buildErrorResponse(text: string) {
+    return {
+        content: [{ type: "text", text }],
+        isError: true
+    };
+}
+
+
+  async function handleGetHuochepiaoList(depStationName :string,arrStationName :string,depDate :string) {
+    // 1.参数校验
+    if(!depStationName || depStationName == "" || !arrStationName || arrStationName == "" || !depDate || depDate==""){
+        return buildErrorResponse('参数不完整，请确保提供了depStationName、arrStationName、depDate');
+    }
+    // 2.模拟浏览器定义个请求头
+    const headers = {
+       'Content-Type': 'application/json',
+       'Host': 'www.ly.com',
+       'Origin': 'https://www.ly.com',
+       'Accept-Encoding': 'gzip, deflate, br, zstd',
+       'User-Agent': getRandomUserAgent()
+    };
 	// 先发送第一个请求，根据城市名称获取编码数据
     const response1 = await fetch(TONGCHENG_CODE_URL, {
             method: 'POST',
             headers: headers,
             body: JSON.stringify({
-                names: [startCityName, arryCityName],
+                names: [depStationName, arrStationName],
                 pid: 1
             })
     });
 
     const respBody:any = await response1.json();
     if (respBody.code !== 200) {
-        return {
-            content: [{
-                    type: "text",
-                    text: `获取火车票城市编码数据失败`
-                }],
-            isError: true
-        };
+        return buildErrorResponse('获取火车票城市编码数据失败');
     }
     // 如果执行到这里说明第1个请求成功，在请求第2个接口 {"code":200,"data":["CQW","BJP"],"g":"1745854839135-18780"}
     const startCode = respBody.data[0];
@@ -86,7 +133,7 @@ const SUPPORT_TOOLS = [
     const params2 = {
     	"depStation":startCode,
     	"arrStation":endCode,
-    	"depDate":startDate,
+    	"depDate":depDate,
     	"type":"ADULT",
         "traceId":Date.now.toString(),
         "pid":1
@@ -101,46 +148,22 @@ const SUPPORT_TOOLS = [
     const data2:any = await response2.json();
     if (data2.code && data2.code !== 200) {
          // 如果执行到这里说可能失败了
-        return {
-            content: [{
-                    type: "text",
-                    text: `获取火车票列表数据失败:${data2.message}`
-                }],
-            isError: true
-        };
+        return buildErrorResponse(`获取火车票列表数据失败:${data2.message}`);
     }
     if(!data2.success){
         // 如果执行到这里说可能失败了
-         return {
-            content: [{
-                    type: "text",
-                    text: `获取火车票列表数据失败:${data2.errorMessage}`
-                }],
-            isError: false
-        };
+        return buildErrorResponse(`获取火车票列表数据失败:${data2.errorMessage}`);
     }
     //  数据解析与格式化
     const resultData = data2.data;
     if(!resultData.trains || resultData.trains.length == 0){
-        return {
-            content: [{
-                    type: "text",
-                    text: "数据为空"
-                }],
-            isError: false
-        };
+        return buildSuccessResponse('数据为空');
     }
     // 如果知道这里，说明数据存在，则开始进行数据的清洗
-    const finalResult = convertFieldNames(resultData,startCityName,arryCityName);
+    const finalResult = convertFieldNames(resultData,depStationName,arrStationName);
 
     // 返回正确的结果
-    return {
-        content: [{
-                type: "text",
-                text: JSON.stringify(finalResult, null, 2)
-            }],
-        isError: false
-    };
+    return buildSuccessResponse(JSON.stringify(finalResult, null, 2));
 }
 
 
@@ -169,11 +192,11 @@ async function handleGetSystemTime() {
     };
 }
 
-const convertFieldNames = (resultData: any,startCityName:string,arryCityName:string) => {
+const convertFieldNames = (resultData: any,depStationName:string,arrStationName:string) => {
     if (!resultData) return resultData;
     return {
-        用户查询出发站:startCityName,
-        用户查询到达站:arryCityName,
+        用户查询出发站:depStationName,
+        用户查询到达站:arrStationName,
         车次列表: resultData.trains?.map((item: { trainCode: string;depStationName:any, depTime:any, runTime:any,depDate: any, 
             arrDate: any,arrTime:any,arrivalDays:any, arrStationName: any,depStationCode:string,startStationCode:string,trainAvs: any[]; }) => ({
           是否当日到达:item.arrivalDays > 1 ? "否" : "是",
@@ -226,8 +249,8 @@ function convertSeatName(seatClassCode: any): any {
 
 // Server setup
 const server = new Server({
-    name: "mcp-server/tongchenglvxing",
-    version: "0.0.1",
+    name: "tongchenglvxing-mcp-server",
+    version: "0.0.2",
 }, {
     capabilities: {
         tools: {},
@@ -242,12 +265,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
       switch (request.params.name) {
-        case "get_huochepiao_list": {
-          const { startCityName,arryCityName,startDate } = request.params.arguments as { startCityName :string,arryCityName :string,startDate :string };
-          return await handleGetHuochepiaoList(startCityName,arryCityName,startDate);
+        case "query_train_tickets_list": {
+          const { depStationName,arrStationName,depDate } = request.params.arguments as { depStationName :string,arrStationName :string,depDate :string };
+          return await handleGetHuochepiaoList(depStationName,arrStationName,depDate);
         }
   
-        case "get_systemtime": {
+        case "get_current_system_time": {
             return await handleGetSystemTime();
         }
         default:
