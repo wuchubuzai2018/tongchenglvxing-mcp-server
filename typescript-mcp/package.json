@@ -1,0 +1,35 @@
+{
+  "name": "@wuchubuzai/tongchenglvxing-mcp-server",
+  "version": "0.0.1",
+  "description": "基于同程旅行网API接口二次封装的MCP Server服务，目前支持火车票查询和系统时间查询功能",
+  "author": "爱海贼的无处不在",
+  "type": "module",
+  "license": "MIT",
+  "main": "bin/index.js",
+  "bin": {
+    "tongchenglvxing-mcp-server": "dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc && shx chmod +x dist/*.js",
+    "prepare": "npm run build",
+    "watch": "tsc --watch"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.10.2",
+    "@types/node-fetch": "^2.6.12",
+    "node-fetch": "^3.3.2",
+    "zod": "^3.24.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "shx": "^0.3.4",
+    "typescript": "^5.8.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  }
+}
